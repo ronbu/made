@@ -4,17 +4,28 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
-func TestEndToEnd(t *testing.T) {
+type endToEndTest struct {
+	madefile []string
+	existing []string
+	change   []string
+	changed  []string
+}
+
+func testEndToEnd(t *testing.T, tcase endToEndTest) {
 	tmp, stop := TempDir()
 	defer stop()
 
-	initial := []string{"aa", "ba", "cb", "db", "Madefile"}
-	createAll(tmp, initial)
+	existing := append(tcase.existing, "Madefile")
+	createAll(tmp, existing)
 
-	err := ioutil.WriteFile(tmp+"/Madefile", []byte("cp *a %c"), 0777)
+	err := ioutil.WriteFile(
+		tmp+"/Madefile",
+		[]byte(strings.Join(tcase.madefile, "\n")),
+		0777)
 	check(err)
 
 	excs, err := Made(tmp)
@@ -23,13 +34,84 @@ func TestEndToEnd(t *testing.T) {
 	}
 	_ = excs
 
-	built, _ := filesetDiff(listAll(tmp), initial)
-	compareFilesets(t, built, []string{"aac", "bac"})
-	// if len(missing) > 0 {
-	// 	t.Fatal("Missing files")
-	// }
+	// createAll(tmp, tcase.change)
 
-	createAll(tmp, []string{"fa"})
+	// excs2, err := Made(tmp)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// _ = excs2
+
+	built, missing := filesetDiff(listAll(tmp), existing)
+	if len(missing) > 0 {
+		for _, m := range missing {
+			t.Fail()
+			t.Error("Made deleted:", m)
+		}
+	}
+	compareFilesets(t, built, tcase.changed)
+
+	for _, ex := range excs {
+		t.Log(ex.String())
+	}
+}
+
+func TestSimpleCommand(t *testing.T) {
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp a b"},
+		existing: []string{"a", "c"},
+		change:   []string{},
+		changed:  []string{"b"},
+	})
+}
+
+func TestMultipleCommands(t *testing.T) {
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp a b", "cp c d"},
+		existing: []string{"a", "c"},
+		change:   []string{},
+		changed:  []string{"b", "d"},
+	})
+}
+
+// func TestDependendCommands(t *testing.T) {
+// 	testEndToEnd(t, endToEndTest{
+// 		madefile: []string{"cp a b", "cp b c"},
+// 		existing: []string{"a", "d"},
+// 		change:   []string{},
+// 		changed:  []string{"b", "c"},
+// 	})
+// }
+
+func TestClassicPattern(t *testing.T) {
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp a* b"},
+		existing: []string{"a", "d"},
+		change:   []string{},
+		changed:  []string{"b"},
+	})
+}
+
+func TestForEachPattern(t *testing.T) {
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp *.a %b"},
+		existing: []string{"a.a", "d"},
+		change:   []string{},
+		changed:  []string{"a.ab"},
+	})
+}
+
+func TestDoNothing(t *testing.T) {
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp c d"},
+		existing: []string{"a", "b"},
+		change:   []string{},
+		changed:  []string{},
+	})
+}
+
+func TestParseMadefile(t *testing.T) {
+
 }
 
 func compareFilesets(t *testing.T, left, right []string) {
@@ -43,13 +125,13 @@ func compareFilesets(t *testing.T, left, right []string) {
 		}
 		if !found {
 			t.Fail()
-			t.Error("Not in right:", l)
+			t.Error("Made created:", l)
 		}
 	}
 	for _, r := range right {
 		if r != "" {
 			t.Fail()
-			t.Error("Not in left:", r)
+			t.Error("Made did not create:", r)
 		}
 	}
 }
