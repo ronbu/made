@@ -12,7 +12,8 @@ type endToEndTest struct {
 	madefile []string
 	existing []string
 	change   []string
-	changed  []string
+	expected []string
+	execs    []string
 }
 
 func testEndToEnd(t *testing.T, tcase endToEndTest) {
@@ -23,7 +24,7 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 	createAll(tmp, existing)
 
 	err := ioutil.WriteFile(
-		tmp+"/Madefile",
+		tmp+madeFile,
 		[]byte(strings.Join(tcase.madefile, "\n")),
 		0777)
 	check(err)
@@ -49,10 +50,16 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 			t.Error("Made deleted:", m)
 		}
 	}
-	compareFilesets(t, built, tcase.changed)
+	compareFilesets(t, built, tcase.expected)
 
-	for _, ex := range excs {
-		t.Log(ex.String())
+	for i, ex := range excs {
+		if len(tcase.execs) > i {
+			if tcase.execs[i] != ex.Cmd {
+				t.Error("Executed", ex.Cmd, "instead of", tcase.execs[i])
+			}
+		} else {
+			t.Error("Unexpected executed:", ex.Cmd)
+		}
 	}
 }
 
@@ -61,7 +68,8 @@ func TestSimpleCommand(t *testing.T) {
 		madefile: []string{"cp |a| b"},
 		existing: []string{"a", "c"},
 		change:   []string{},
-		changed:  []string{"b"},
+		expected: []string{"b"},
+		execs:    []string{"cp a b"},
 	})
 }
 
@@ -70,7 +78,8 @@ func TestMultipleCommands(t *testing.T) {
 		madefile: []string{"cp |a| b", "cp |c| d"},
 		existing: []string{"a", "c"},
 		change:   []string{},
-		changed:  []string{"b", "d"},
+		expected: []string{"b", "d"},
+		execs:    []string{"cp a b", "cp c d"},
 	})
 }
 
@@ -79,7 +88,8 @@ func TestDependendCommands(t *testing.T) {
 		madefile: []string{"cp |a| b", "cp |b| c"},
 		existing: []string{"a", "d"},
 		change:   []string{},
-		changed:  []string{"b", "c"},
+		expected: []string{"b", "c"},
+		execs:    []string{"cp a b", "cp b c"},
 	})
 }
 
@@ -88,7 +98,8 @@ func TestClassicPattern(t *testing.T) {
 		madefile: []string{"cp |a*| b"},
 		existing: []string{"a", "d"},
 		change:   []string{},
-		changed:  []string{"b"},
+		expected: []string{"b"},
+		execs:    []string{"cp a* b"},
 	})
 }
 
@@ -97,7 +108,8 @@ func TestForEachPattern(t *testing.T) {
 		madefile: []string{"cp |*.a| %b"},
 		existing: []string{"a.a", "d"},
 		change:   []string{},
-		changed:  []string{"a.ab"},
+		expected: []string{"a.ab"},
+		execs:    []string{"cp a.a a.ab"},
 	})
 }
 
@@ -106,7 +118,8 @@ func TestDoNothing(t *testing.T) {
 		madefile: []string{"cp c d"},
 		existing: []string{"a", "b"},
 		change:   []string{},
-		changed:  []string{},
+		expected: []string{},
+		execs:    []string{},
 	})
 }
 

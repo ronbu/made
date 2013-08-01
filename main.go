@@ -13,6 +13,7 @@ import (
 
 const (
 	stateFile = "/.made.json"
+	madeFile  = "/Madefile"
 )
 
 type files map[string]time.Time
@@ -141,18 +142,18 @@ func filterCmds(change string, rules [][]string) (cmds [][]string) {
 func Made(root string) (excs []Execution, err error) {
 	for i := 0; i < 4; i++ {
 		_, changed := getChanged(root)
-		var madefile []byte
-		madefile, err = ioutil.ReadFile(root + "/Madefile")
+		var mf []byte
+		mf, err = ioutil.ReadFile(root + madeFile)
 		if err != nil {
 			return
 		}
-		if strings.Contains(string(madefile), "\n") {
+		if strings.Contains(string(mf), "\n") {
 			fmt.Println(changed)
 		}
 
 		didExec := false
 		for change := range changed {
-			cmds := parseMadefile(madefile)
+			cmds := parseMadefile(mf)
 			cmds = filterCmds(change, cmds)
 
 			for _, cmd := range cmds {
