@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -24,8 +25,6 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 		[]byte(strings.Join(tcase.madefile, "\n")),
 		0777))
 
-	// writeState(tmp, mapFiles(tmp))
-
 	initExecs, err := Made(tmp)
 	if err != nil {
 		t.Fatal(err)
@@ -41,22 +40,34 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 		t.Fatal(err)
 	}
 
-	built, missing := filesetDiff(listAll(tmp), tcase.change)
-	if len(missing) > 0 {
-		for _, m := range missing {
-			t.Fail()
-			t.Error("Made deleted:", m)
+	for i, name := range tcase.change {
+		if strings.HasSuffix(name, "/") {
+			tcase.change[i] = name[:len(name)-1]
 		}
+	}
+	built, missing := filesetDiff(listAll(tmp), tcase.change)
+	for _, m := range missing {
+		t.Fail()
+		t.Error("Made deleted:", m)
 	}
 	compareFilesets(t, built, tcase.expected)
 
-	for i, ex := range excs {
+	fmt.Println(excs)
+	var i int
+	var ex Execution
+	for i, ex = range excs {
 		if len(tcase.execs) > i {
 			if tcase.execs[i] != ex.Cmd {
-				t.Error("Executed", ex.Cmd, "instead of", tcase.execs[i])
+				t.Error("Executed:", ex.Cmd, "instead of:", tcase.execs[i])
 			}
 		} else {
 			t.Error("Unexpected executed:", ex.Cmd)
+		}
+	}
+	i++
+	if len(tcase.execs) > i {
+		for _, c := range tcase.execs[i:] {
+			t.Error("Did not execute:", c)
 		}
 	}
 }
@@ -106,6 +117,15 @@ func TestForEachPattern(t *testing.T) {
 	})
 }
 
+func TestCopyToDirectory(t *testing.T) {
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp |a| dir"},
+		change:   []string{"a", "dir/"},
+		expected: []string{"dir/a"},
+		execs:    []string{"cp a dir"},
+	})
+}
+
 func TestDoNothing(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp c d"},
@@ -113,10 +133,6 @@ func TestDoNothing(t *testing.T) {
 		expected: []string{},
 		execs:    []string{},
 	})
-}
-
-func TestParseMadefile(t *testing.T) {
-
 }
 
 func compareFilesets(t *testing.T, left, right []string) {
@@ -164,6 +180,14 @@ func filesetDiff(left, right []string) (res, missing []string) {
 
 func createAll(base string, fps []string) {
 	for _, fp := range fps {
+		if strings.Contains(fp, "/") {
+			if fp[len(fp)-1] == '/' {
+				check(os.MkdirAll(filepath.Join(base, fp), 0777))
+				continue
+			} else {
+				check(os.MkdirAll(filepath.Dir(filepath.Join(base, fp)), 0777))
+			}
+		}
 		check(ioutil.WriteFile(
 			filepath.Join(base, fp), []byte(""), 0777))
 	}
