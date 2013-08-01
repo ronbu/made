@@ -10,7 +10,6 @@ import (
 
 type endToEndTest struct {
 	madefile []string
-	existing []string
 	change   []string
 	expected []string
 	execs    []string
@@ -20,30 +19,29 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 	tmp, stop := TempDir()
 	defer stop()
 
-	existing := append(tcase.existing, "Madefile")
-	createAll(tmp, existing)
-
-	err := ioutil.WriteFile(
+	check(ioutil.WriteFile(
 		tmp+madeFile,
 		[]byte(strings.Join(tcase.madefile, "\n")),
-		0777)
-	check(err)
+		0777))
+
+	// writeState(tmp, mapFiles(tmp))
+
+	initExecs, err := Made(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(initExecs) > 0 {
+		t.Fatal("Should not execute anything on init")
+	}
+
+	createAll(tmp, tcase.change)
 
 	excs, err := Made(tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = excs
 
-	// createAll(tmp, tcase.change)
-
-	// excs2, err := Made(tmp)
-	// if err != nil {
-	// 	t.Fatal(err)
-	// }
-	// _ = excs2
-
-	built, missing := filesetDiff(listAll(tmp), existing)
+	built, missing := filesetDiff(listAll(tmp), tcase.change)
 	if len(missing) > 0 {
 		for _, m := range missing {
 			t.Fail()
@@ -66,8 +64,7 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 func TestSimpleCommand(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |a| b"},
-		existing: []string{"a", "c"},
-		change:   []string{},
+		change:   []string{"a", "c"},
 		expected: []string{"b"},
 		execs:    []string{"cp a b"},
 	})
@@ -76,8 +73,7 @@ func TestSimpleCommand(t *testing.T) {
 func TestMultipleCommands(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |a| b", "cp |c| d"},
-		existing: []string{"a", "c"},
-		change:   []string{},
+		change:   []string{"a", "c"},
 		expected: []string{"b", "d"},
 		execs:    []string{"cp a b", "cp c d"},
 	})
@@ -86,8 +82,7 @@ func TestMultipleCommands(t *testing.T) {
 func TestDependendCommands(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |a| b", "cp |b| c"},
-		existing: []string{"a", "d"},
-		change:   []string{},
+		change:   []string{"a", "d"},
 		expected: []string{"b", "c"},
 		execs:    []string{"cp a b", "cp b c"},
 	})
@@ -96,8 +91,7 @@ func TestDependendCommands(t *testing.T) {
 func TestClassicPattern(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |a*| b"},
-		existing: []string{"a", "d"},
-		change:   []string{},
+		change:   []string{"a", "d"},
 		expected: []string{"b"},
 		execs:    []string{"cp a* b"},
 	})
@@ -106,8 +100,7 @@ func TestClassicPattern(t *testing.T) {
 func TestForEachPattern(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |*.a| %b"},
-		existing: []string{"a.a", "d"},
-		change:   []string{},
+		change:   []string{"a.a", "d"},
 		expected: []string{"a.ab"},
 		execs:    []string{"cp a.a a.ab"},
 	})
@@ -116,8 +109,7 @@ func TestForEachPattern(t *testing.T) {
 func TestDoNothing(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp c d"},
-		existing: []string{"a", "b"},
-		change:   []string{},
+		change:   []string{"a", "b"},
 		expected: []string{},
 		execs:    []string{},
 	})
@@ -136,7 +128,7 @@ func compareFilesets(t *testing.T, left, right []string) {
 				right[i] = ""
 			}
 		}
-		if !found && l != stateFile[1:] {
+		if !found && l != stateFile[1:] && l != madeFile[1:] {
 			t.Fail()
 			t.Error("Made created:", l)
 		}
