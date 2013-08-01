@@ -58,7 +58,7 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 
 func TestSimpleCommand(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp a b"},
+		madefile: []string{"cp |a| b"},
 		existing: []string{"a", "c"},
 		change:   []string{},
 		changed:  []string{"b"},
@@ -67,25 +67,25 @@ func TestSimpleCommand(t *testing.T) {
 
 func TestMultipleCommands(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp a b", "cp c d"},
+		madefile: []string{"cp |a| b", "cp |c| d"},
 		existing: []string{"a", "c"},
 		change:   []string{},
 		changed:  []string{"b", "d"},
 	})
 }
 
-// func TestDependendCommands(t *testing.T) {
-// 	testEndToEnd(t, endToEndTest{
-// 		madefile: []string{"cp a b", "cp b c"},
-// 		existing: []string{"a", "d"},
-// 		change:   []string{},
-// 		changed:  []string{"b", "c"},
-// 	})
-// }
+func TestDependendCommands(t *testing.T) {
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp |a| b", "cp |b| c"},
+		existing: []string{"a", "d"},
+		change:   []string{},
+		changed:  []string{"b", "c"},
+	})
+}
 
 func TestClassicPattern(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp a* b"},
+		madefile: []string{"cp |a*| b"},
 		existing: []string{"a", "d"},
 		change:   []string{},
 		changed:  []string{"b"},
@@ -94,7 +94,7 @@ func TestClassicPattern(t *testing.T) {
 
 func TestForEachPattern(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp *.a %b"},
+		madefile: []string{"cp |*.a| %b"},
 		existing: []string{"a.a", "d"},
 		change:   []string{},
 		changed:  []string{"a.ab"},
@@ -123,7 +123,7 @@ func compareFilesets(t *testing.T, left, right []string) {
 				right[i] = ""
 			}
 		}
-		if !found {
+		if !found && l != stateFile[1:] {
 			t.Fail()
 			t.Error("Made created:", l)
 		}

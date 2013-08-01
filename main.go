@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -49,9 +50,12 @@ func compareFileMaps(from, to files) (compared changes) {
 	}
 	for fk, fv := range from {
 		tv, ok := to[fk]
-		if ok && tv.After(fv) {
-			compared[fk] = true
+		// fmt.Println(fk, tv, fv)
+		if ok {
 			delete(cTo, fk)
+			if tv.After(fv) {
+				compared[fk] = true
+			}
 		} else {
 			compared[fk] = false
 		}
@@ -71,10 +75,12 @@ func getChanged(root string) (init bool, changed changes) {
 		for k := range to {
 			changed[k] = true
 		}
-		return true, changed
+		writeState(root, to)
+		return
 	}
 	check(err)
 	check(json.Unmarshal(b, &from))
+	writeState(root, to)
 	return init, compareFileMaps(from, to)
 }
 
@@ -95,66 +101,69 @@ func run(root string, cmd []string) Execution {
 		Output: output}
 }
 
-func filterCmds(changed changes, rules [][]string) (cmds [][]string) {
-	for change := range changed {
-		// fmt.Println("change: ", change)
-		for _, rule := range rules {
-			cmd := append([]string{}, rule...)
-			// fmt.Println(cmd, rule)
-			// fmt.Println("Processing Cmd:", cmd, "with change: ", change)
-			foundPercent := false
-			matchedIndices := []int{}
-			for i, arg := range rule {
-				// println(arg, change)
+func filterCmds(change string, rules [][]string) (cmds [][]string) {
+	// fmt.Println("change: ", change)
+	for _, rule := range rules {
+		cmd := append([]string{}, rule...)
+		// fmt.Println(cmd, rule)
+		// fmt.Println("Processing Cmd:", cmd, "with change: ", change)
+		foundPercent := false
+		matchedIndices := []int{}
+		for i, arg := range rule {
+			// println(arg, change)
+			if len(arg) > 1 && arg[0] == '|' && arg[len(arg)-1] == '|' {
+				arg = arg[1 : len(arg)-1]
+				cmd[i] = arg
 				m, _ := filepath.Match(arg, change)
 				if m {
-					// println("matched: ", arg)
 					matchedIndices = append(matchedIndices, i)
 				}
-				if strings.Contains(arg, "%") {
-					foundPercent = true
-					cmd[i] = strings.Replace(arg, "%", filepath.Base(change), -1)
-					// fmt.Printf("Found Percent in: %v, at arg: %s\n", rule, arg)
+			}
+			if strings.Contains(arg, "%") {
+				foundPercent = true
+				cmd[i] = strings.Replace(arg, "%", filepath.Base(change), -1)
+				// fmt.Printf("Found Percent in: %v, at arg: %s\n", rule, arg)
+			}
+		}
+		if len(matchedIndices) > 0 {
+			if foundPercent {
+				for _, i := range matchedIndices {
+					cmd[i] = change
 				}
 			}
-			if len(matchedIndices) > 0 {
-				if foundPercent {
-					for _, i := range matchedIndices {
-						cmd[i] = change
-					}
-				}
-				// fmt.Printf("matched: %v, in cmd: %v, with change: %s\n", matchedIndices, rule, change)
-				cmds = append(cmds, cmd)
-			}
+			// fmt.Printf("matched: %v, in cmd: %v, with change: %s\n", matchedIndices, rule, change)
+			cmds = append(cmds, cmd)
 		}
 	}
 	return cmds
 }
 
 func Made(root string) (excs []Execution, err error) {
-	// for {
-	var exs []Execution
-	_, changed := getChanged(root)
-	// if len(changed) == 0 {
-	// 	return
-	// }
-	var madefile []byte
-	madefile, err = ioutil.ReadFile(root + "/Madefile")
-	if err != nil {
-		return
-	}
-	cmds := parseMadefile(madefile)
-	cmds = filterCmds(changed, cmds)
+	for i := 0; i < 4; i++ {
+		_, changed := getChanged(root)
+		var madefile []byte
+		madefile, err = ioutil.ReadFile(root + "/Madefile")
+		if err != nil {
+			return
+		}
+		if strings.Contains(string(madefile), "\n") {
+			fmt.Println(changed)
+		}
 
-	for _, cmd := range cmds {
-		exs = append(exs, run(root, cmd))
-	}
+		didExec := false
+		for change := range changed {
+			cmds := parseMadefile(madefile)
+			cmds = filterCmds(change, cmds)
 
-	excs = append(excs, exs...)
-	if len(exs) == 0 {
-		return
+			for _, cmd := range cmds {
+				excs = append(excs, run(root, cmd))
+				didExec = true
+			}
+		}
+		if !didExec {
+			return
+		}
 	}
-	// }
 	return
 }
 
