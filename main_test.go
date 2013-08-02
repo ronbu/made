@@ -34,6 +34,7 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 	}
 
 	createAll(tmp, tcase.change)
+	changeSet := listAll(tmp)
 
 	excs, err := Made(tmp)
 	if err != nil {
@@ -45,7 +46,7 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 			tcase.change[i] = name[:len(name)-1]
 		}
 	}
-	built, missing := filesetDiff(listAll(tmp), tcase.change)
+	built, missing := filesetDiff(listAll(tmp), changeSet)
 	for _, m := range missing {
 		t.Fail()
 		t.Error("Made deleted:", m)
@@ -112,31 +113,31 @@ func TestForEachPattern(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |dir/*.a| %fa"},
 		change:   []string{"dir/a.a"},
-		expected: []string{"dir/a.aa", "dir"},
+		expected: []string{"dir/a.aa"},
 		execs:    []string{"cp dir/a.a dir/a.aa"},
 	})
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |dir/*.a| %b"},
 		change:   []string{"dir/a.a"},
-		expected: []string{"a.a", "dir"},
+		expected: []string{"a.a"},
 		execs:    []string{"cp dir/a.a a.a"},
 	})
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |dir/*.a| %B"},
 		change:   []string{"dir/a.a"},
-		expected: []string{"a", "dir"},
+		expected: []string{"a"},
 		execs:    []string{"cp dir/a.a a"},
 	})
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |dir/*.a| %e"},
 		change:   []string{"dir/a.a"},
-		expected: []string{"a", "dir"},
+		expected: []string{"a"},
 		execs:    []string{"cp dir/a.a a"},
 	})
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |dir/*.a| %B.%e"},
 		change:   []string{"dir/a.a"},
-		expected: []string{"a.a", "dir"},
+		expected: []string{"a.a"},
 		execs:    []string{"cp dir/a.a a.a"},
 	})
 	testEndToEnd(t, endToEndTest{
@@ -151,7 +152,7 @@ func TestDirectory(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp |dir/a| dir/b"},
 		change:   []string{"dir/a"},
-		expected: []string{"dir", "dir/b"},
+		expected: []string{"dir/b"},
 		execs:    []string{"cp dir/a dir/b"},
 	})
 }
@@ -184,7 +185,7 @@ func compareFilesets(t *testing.T, left, right []string) {
 				right[i] = ""
 			}
 		}
-		if !found && l != stateFile[1:] && l != madeFile[1:] {
+		if !found {
 			t.Fail()
 			t.Error("Made created:", l)
 		}
