@@ -12,8 +12,19 @@ func NewSet(elems []interface{}) MapSet {
 	return s
 }
 
-func (m MapSet) Add(elem interface{}) {
+func (m MapSet) AddF(elem interface{}) MapSet {
+	c := m.Copy()
+	return c.Add(elem)
+}
+
+func (m MapSet) Add(elem interface{}) MapSet {
 	m[elem] = struct{}{}
+	return m
+}
+
+func (m MapSet) Contains(elem interface{}) bool {
+	_, ok := m[elem]
+	return ok
 }
 
 func (m MapSet) Equals(o MapSet) bool {
@@ -37,6 +48,10 @@ func (m MapSet) Union(o MapSet) MapSet {
 		s[k] = v
 	}
 	return s
+}
+
+func (m MapSet) Copy() MapSet {
+	return m.Union(m)
 }
 
 func (m MapSet) Inter(o MapSet) MapSet {
