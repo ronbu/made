@@ -110,21 +110,61 @@ func TestClassicPattern(t *testing.T) {
 
 func TestForEachPattern(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |*.a| %b"},
-		change:   []string{"a.a", "d"},
-		expected: []string{"a.ab"},
-		execs:    []string{"cp a.a a.ab"},
+		madefile: []string{"cp |dir/*.a| %fa"},
+		change:   []string{"dir/a.a"},
+		expected: []string{"dir/a.aa", "dir"},
+		execs:    []string{"cp dir/a.a dir/a.aa"},
+	})
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp |dir/*.a| %b"},
+		change:   []string{"dir/a.a"},
+		expected: []string{"a.a", "dir"},
+		execs:    []string{"cp dir/a.a a.a"},
+	})
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp |dir/*.a| %B"},
+		change:   []string{"dir/a.a"},
+		expected: []string{"a", "dir"},
+		execs:    []string{"cp dir/a.a a"},
+	})
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp |dir/*.a| %e"},
+		change:   []string{"dir/a.a"},
+		expected: []string{"a", "dir"},
+		execs:    []string{"cp dir/a.a a"},
+	})
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp |dir/*.a| %B.%e"},
+		change:   []string{"dir/a.a"},
+		expected: []string{"a.a", "dir"},
+		execs:    []string{"cp dir/a.a a.a"},
+	})
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp |a.*| b.%e 2> %Bb"},
+		change:   []string{"a.a"},
+		expected: []string{"b.a", "ab"},
+		execs:    []string{"cp a.a b.a 2> ab"},
 	})
 }
 
-func TestCopyToDirectory(t *testing.T) {
+func TestDirectory(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |a| dir"},
-		change:   []string{"a", "dir/"},
-		expected: []string{"dir/a"},
-		execs:    []string{"cp a dir"},
+		madefile: []string{"cp |dir/a| dir/b"},
+		change:   []string{"dir/a"},
+		expected: []string{"dir", "dir/b"},
+		execs:    []string{"cp dir/a dir/b"},
 	})
 }
+
+// TODO: Detect infinite loops
+// func TestInfiniteLoop(t *testing.T) {
+// 	testEndToEnd(t, endToEndTest{
+// 		madefile: []string{"cp |a| b","cp |b| a"},
+// 		change:   []string{"a"},
+// 		expected: []string{""},
+// 		execs:    []string{"cp a dir"},
+// 	})
+// }
 
 func TestDoNothing(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
@@ -180,16 +220,16 @@ func filesetDiff(left, right []string) (res, missing []string) {
 
 func createAll(base string, fps []string) {
 	for _, fp := range fps {
+		abs := filepath.Join(base, fp)
 		if strings.Contains(fp, "/") {
 			if fp[len(fp)-1] == '/' {
-				check(os.MkdirAll(filepath.Join(base, fp), 0777))
+				check(os.MkdirAll(abs, 0777))
 				continue
 			} else {
-				check(os.MkdirAll(filepath.Dir(filepath.Join(base, fp)), 0777))
+				check(os.MkdirAll(filepath.Dir(abs), 0777))
 			}
 		}
-		check(ioutil.WriteFile(
-			filepath.Join(base, fp), []byte(""), 0777))
+		check(ioutil.WriteFile(abs, []byte(""), 0777))
 	}
 }
 

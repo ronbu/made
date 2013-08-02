@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+var _ = fmt.Fscan
+
 const (
 	stateFile = "/.made.json"
 	madeFile  = "/Madefile"
@@ -102,6 +104,44 @@ func run(root string, cmd []string) Execution {
 		Output: output}
 }
 
+// %f - whole filepath
+// %d - dirname of path
+// %b - basename of file
+// %B - basename without extension
+// %e - extension of file
+func replaceForEach(name, arg string) (string, bool) {
+	li := -1
+	found := false
+	for i := 0; i > li; {
+		li = i
+		if i = strings.Index(arg, "%"); i > -1 {
+			ext := filepath.Ext(name)
+			if len(ext) > 1 {
+				ext = ext[1:] // strip
+			}
+			base := filepath.Base(name)
+			m := map[rune]string{
+				'f': name,
+				'd': filepath.Dir(name),
+				'b': base,
+				'B': strings.TrimSuffix(base, filepath.Ext(name)),
+				'e': ext,
+			}
+			i++
+			r := rune(arg[i])
+			insert, ok := m[r]
+			if ok {
+				found = true
+				arg = strings.Replace(arg, "%"+string(r), insert, -1)
+				// println(arg, insert, strings.TrimSuffix("dir/a.a", filepath.Ext("dir/a.a")))
+			}
+		} else {
+			break
+		}
+	}
+	return arg, found
+}
+
 func filterCmds(change string, rules [][]string) (cmds [][]string) {
 	// fmt.Println("change: ", change)
 	for _, rule := range rules {
@@ -112,7 +152,7 @@ func filterCmds(change string, rules [][]string) (cmds [][]string) {
 		matchedIndices := []int{}
 		for i, arg := range rule {
 			// println(arg, change)
-			if len(arg) > 1 && arg[0] == '|' && arg[len(arg)-1] == '|' {
+			if strings.HasPrefix(arg, "|") && strings.HasSuffix(arg, "|") {
 				arg = arg[1 : len(arg)-1]
 				cmd[i] = arg
 				m, _ := filepath.Match(arg, change)
@@ -120,11 +160,7 @@ func filterCmds(change string, rules [][]string) (cmds [][]string) {
 					matchedIndices = append(matchedIndices, i)
 				}
 			}
-			if strings.Contains(arg, "%") {
-				foundPercent = true
-				cmd[i] = strings.Replace(arg, "%", filepath.Base(change), -1)
-				// fmt.Printf("Found Percent in: %v, at arg: %s\n", rule, arg)
-			}
+			cmd[i], foundPercent = replaceForEach(change, arg)
 		}
 		if len(matchedIndices) > 0 {
 			if foundPercent {
@@ -147,9 +183,9 @@ func Made(root string) (excs []Execution, err error) {
 		if err != nil {
 			return
 		}
-		if strings.Contains(string(mf), "\n") {
-			fmt.Println(changed)
-		}
+		// if strings.Contains(string(mf), "\n") {
+		// 	fmt.Println(changed)
+		// }
 
 		didExec := false
 		for change := range changed {
