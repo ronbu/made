@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -87,19 +88,15 @@ func getChanged(root string) (init bool, changed changes) {
 	return init, compareFileMaps(from, to)
 }
 
-func run(root string, cmd []string) Execution {
-	cmdStr := cmd[0]
-	for _, arg := range cmd[1:] {
-		cmdStr += " " + arg
-	}
+func run(root string, cmd string) Execution {
 	sh := "/usr/local/bin/fish"
-	c := exec.Command(sh, "-c", cmdStr)
+	c := exec.Command(sh, "-c", cmd)
 	// c.Stderr = os.Stderr
 	// c.Stdout = os.Stdout
 	c.Dir = root
 	output, err := c.CombinedOutput()
 	return Execution{
-		Cmd:    cmdStr,
+		Cmd:    cmd,
 		Err:    err,
 		Output: output}
 }
@@ -142,41 +139,38 @@ func replaceForEach(name, arg string) (string, bool) {
 	return arg, found
 }
 
-func filterCmds(change string, rules [][]string) (cmds [][]string) {
-	// fmt.Println("change: ", change)
-	for _, rule := range rules {
-		cmd := append([]string{}, rule...)
-		// fmt.Println(cmd, rule)
-		// fmt.Println("Processing Cmd:", cmd, "with change: ", change)
-		foundPercent := false
-		matchedIndices := []int{}
-		for i, arg := range rule {
-			// println(arg, change)
-			if strings.HasPrefix(arg, "|") && strings.HasSuffix(arg, "|") {
-				arg = arg[1 : len(arg)-1]
-				cmd[i] = arg
-				m, _ := filepath.Match(arg, change)
-				if m {
-					matchedIndices = append(matchedIndices, i)
-				}
-			}
-			cmd[i], foundPercent = replaceForEach(change, arg)
+func filterCmds(change, madeFile string) (cmds []string) {
+	regex := regexp.MustCompile(`\s(<\|(.+?)\|>)\s`)
+	for _, rule := range strings.Split(madeFile, "\n") {
+		ms := regex.FindAllStringSubmatchIndex(rule, 1)
+		if len(ms) != 1 {
+			continue
 		}
-		if len(matchedIndices) > 0 {
-			if foundPercent {
-				for _, i := range matchedIndices {
-					cmd[i] = change
-				}
-			}
-			// fmt.Printf("matched: %v, in cmd: %v, with change: %s\n", matchedIndices, rule, change)
-			cmds = append(cmds, cmd)
+
+		glob := rule[ms[0][4]:ms[0][5]]
+		m, _ := filepath.Match(glob, change)
+		if !m {
+			continue
 		}
+
+		cmd, isForeach := replaceForEach(change, rule)
+		if isForeach {
+			cmd = regex.ReplaceAllString(cmd, " "+change+" ")
+		} else {
+			cmd = regex.ReplaceAllStringFunc(cmd, func(in string) string {
+				in = strings.Replace(in, " <|", " ", 1)
+				in = strings.Replace(in, "|> ", " ", 1)
+				return in
+			})
+		}
+		cmds = append(cmds, cmd)
 	}
-	return cmds
+	return
 }
 
 func Made(root string) (excs []Execution, err error) {
-	for i := 0; i < 4; i++ {
+	//TODO: initialize here
+	for {
 		_, changed := getChanged(root)
 		var mf []byte
 		mf, err = ioutil.ReadFile(root + madeFile)
@@ -189,9 +183,7 @@ func Made(root string) (excs []Execution, err error) {
 
 		didExec := false
 		for change := range changed {
-			cmds := parseMadefile(mf)
-			cmds = filterCmds(change, cmds)
-
+			cmds := filterCmds(change, string(mf))
 			for _, cmd := range cmds {
 				excs = append(excs, run(root, cmd))
 				didExec = true
@@ -217,26 +209,6 @@ func listAll(dir string) (files []string) {
 	return files
 }
 
-func parseMadefile(madeFile []byte) (cmds [][]string) {
-	// Split function seems to have a bug
-	fixSplit := func(s, sep string) (splitted []string) {
-		splitted = strings.Split(s, sep)
-		if len(splitted) == 1 && splitted[0] == "" {
-			splitted = []string{}
-		}
-		return
-	}
-	// println("New mdfile: ", madeFile)
-	for _, line := range fixSplit(string(madeFile), "\n") {
-		// line = strings.Trim(line, " \t")
-		// if strings.HasPrefix(line, "#") {
-		// 	continue
-		// }
-		cmds = append(cmds, fixSplit(line, " "))
-	}
-	return
-}
-
 func check(err error) {
 	if err != nil {
 		panic(err)
@@ -260,7 +232,7 @@ func (e *Execution) String() string {
 		str += "\n\t" + e.Err.Error()
 	}
 	if output != "" {
-		str += "\n\t" + string(e.Output)
+		str += "\n\t" + output
 	}
 	return str
 }

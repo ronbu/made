@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -53,7 +52,7 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 	}
 	compareFilesets(t, built, tcase.expected)
 
-	fmt.Println(excs)
+	// t.Log(excs)
 	var i int
 	var ex Execution
 	for i, ex = range excs {
@@ -75,7 +74,7 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 
 func TestSimpleCommand(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |a| b"},
+		madefile: []string{"cp <|a|> b"},
 		change:   []string{"a", "c"},
 		expected: []string{"b"},
 		execs:    []string{"cp a b"},
@@ -84,7 +83,7 @@ func TestSimpleCommand(t *testing.T) {
 
 func TestMultipleCommands(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |a| b", "cp |c| d"},
+		madefile: []string{"cp <|a|> b", "cp <|c|> d"},
 		change:   []string{"a", "c"},
 		expected: []string{"b", "d"},
 		execs:    []string{"cp a b", "cp c d"},
@@ -93,7 +92,7 @@ func TestMultipleCommands(t *testing.T) {
 
 func TestDependendCommands(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |a| b", "cp |b| c"},
+		madefile: []string{"cp <|a|> b", "cp <|b|> c"},
 		change:   []string{"a", "d"},
 		expected: []string{"b", "c"},
 		execs:    []string{"cp a b", "cp b c"},
@@ -102,7 +101,7 @@ func TestDependendCommands(t *testing.T) {
 
 func TestClassicPattern(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |a*| b"},
+		madefile: []string{"cp <|a*|> b"},
 		change:   []string{"a", "d"},
 		expected: []string{"b"},
 		execs:    []string{"cp a* b"},
@@ -111,37 +110,37 @@ func TestClassicPattern(t *testing.T) {
 
 func TestForEachPattern(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |dir/*.a| %fa"},
+		madefile: []string{"cp <|dir/*.a|> %fa"},
 		change:   []string{"dir/a.a"},
 		expected: []string{"dir/a.aa"},
 		execs:    []string{"cp dir/a.a dir/a.aa"},
 	})
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |dir/*.a| %b"},
+		madefile: []string{"cp <|dir/*.a|> %b"},
 		change:   []string{"dir/a.a"},
 		expected: []string{"a.a"},
 		execs:    []string{"cp dir/a.a a.a"},
 	})
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |dir/*.a| %B"},
+		madefile: []string{"cp <|dir/*.a|> %B"},
 		change:   []string{"dir/a.a"},
 		expected: []string{"a"},
 		execs:    []string{"cp dir/a.a a"},
 	})
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |dir/*.a| %e"},
+		madefile: []string{"cp <|dir/*.a|> %e"},
 		change:   []string{"dir/a.a"},
 		expected: []string{"a"},
 		execs:    []string{"cp dir/a.a a"},
 	})
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |dir/*.a| %B.%e"},
+		madefile: []string{"cp <|dir/*.a|> %B.%e"},
 		change:   []string{"dir/a.a"},
 		expected: []string{"a.a"},
 		execs:    []string{"cp dir/a.a a.a"},
 	})
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |a.*| b.%e 2> %Bb"},
+		madefile: []string{"cp <|a.*|> b.%e 2> %Bb"},
 		change:   []string{"a.a"},
 		expected: []string{"b.a", "ab"},
 		execs:    []string{"cp a.a b.a 2> ab"},
@@ -150,7 +149,7 @@ func TestForEachPattern(t *testing.T) {
 
 func TestDirectory(t *testing.T) {
 	testEndToEnd(t, endToEndTest{
-		madefile: []string{"cp |dir/a| dir/b"},
+		madefile: []string{"cp <|dir/a|> dir/b"},
 		change:   []string{"dir/a"},
 		expected: []string{"dir/b"},
 		execs:    []string{"cp dir/a dir/b"},
@@ -160,7 +159,7 @@ func TestDirectory(t *testing.T) {
 // TODO: Detect infinite loops
 // func TestInfiniteLoop(t *testing.T) {
 // 	testEndToEnd(t, endToEndTest{
-// 		madefile: []string{"cp |a| b","cp |b| a"},
+// 		madefile: []string{"cp <|a|> b","cp <|b|> a"},
 // 		change:   []string{"a"},
 // 		expected: []string{""},
 // 		execs:    []string{"cp a dir"},
