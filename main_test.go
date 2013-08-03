@@ -45,17 +45,23 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 			tcase.change[i] = name[:len(name)-1]
 		}
 	}
+	// e := run(tmp, "find .")
+	// t.Log(e.String())
 	built, missing := filesetDiff(listAll(tmp), changeSet)
 	for _, m := range missing {
 		t.Fail()
 		t.Error("Made deleted:", m)
 	}
+	t.Log(built)
 	compareFilesets(t, built, tcase.expected)
 
 	// t.Log(excs)
 	var i int
 	var ex Execution
 	for i, ex = range excs {
+		if ex.Err != nil {
+			t.Log(ex.String())
+		}
 		if len(tcase.execs) > i {
 			if tcase.execs[i] != ex.Cmd {
 				t.Error("Executed:", ex.Cmd, "instead of:", tcase.execs[i])
@@ -153,6 +159,27 @@ func TestDirectory(t *testing.T) {
 		change:   []string{"dir/a"},
 		expected: []string{"dir/b"},
 		execs:    []string{"cp dir/a dir/b"},
+	})
+}
+
+func TestMultipleMatches(t *testing.T) {
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp <|a|> <|b|> dir"},
+		change:   []string{"dir/", "a", "b"},
+		expected: []string{"dir/a", "dir/b"},
+		execs:    []string{"cp a b dir"},
+	})
+}
+
+// When there are 2 marked patterns and
+// one of them is a non existing file
+// the rule will still be executed
+func TestMultiplePatSingleMatch(t *testing.T) {
+	testEndToEnd(t, endToEndTest{
+		madefile: []string{"cp <|a|> <|b|> dir"},
+		change:   []string{"dir/", "b"},
+		expected: []string{"dir/b"},
+		execs:    []string{"cp a b dir"},
 	})
 }
 

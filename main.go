@@ -140,28 +140,25 @@ func replaceForEach(name, arg string) (string, bool) {
 }
 
 func filterCmds(change, madeFile string) (cmds []string) {
-	regex := regexp.MustCompile(`\s(<\|(.+?)\|>)\s`)
+	regex := regexp.MustCompile(`<\|(.+?)\|>`)
 	for _, rule := range strings.Split(madeFile, "\n") {
-		ms := regex.FindAllStringSubmatchIndex(rule, 1)
-		if len(ms) != 1 {
-			continue
+		matched := false
+		ms := regex.FindAllStringSubmatchIndex(rule, -1)
+		for _, sm := range ms {
+			glob := rule[sm[2]:sm[3]]
+			if matched, _ = filepath.Match(glob, change); matched {
+				break
+			}
 		}
-
-		glob := rule[ms[0][4]:ms[0][5]]
-		m, _ := filepath.Match(glob, change)
-		if !m {
+		if !matched {
 			continue
 		}
 
 		cmd, isForeach := replaceForEach(change, rule)
 		if isForeach {
-			cmd = regex.ReplaceAllString(cmd, " "+change+" ")
+			cmd = regex.ReplaceAllString(cmd, change)
 		} else {
-			cmd = regex.ReplaceAllStringFunc(cmd, func(in string) string {
-				in = strings.Replace(in, " <|", " ", 1)
-				in = strings.Replace(in, "|> ", " ", 1)
-				return in
-			})
+			cmd = regex.ReplaceAllString(cmd, "$1")
 		}
 		cmds = append(cmds, cmd)
 	}
@@ -182,13 +179,19 @@ func Made(root string) (excs []Execution, err error) {
 		// }
 
 		didExec := false
+		excMap := make(map[string]struct{})
 		for change := range changed {
-			cmds := filterCmds(change, string(mf))
-			for _, cmd := range cmds {
-				excs = append(excs, run(root, cmd))
-				didExec = true
+			for _, c := range filterCmds(change, string(mf)) {
+				if _, ok := excMap[c]; ok {
+					continue
+				} else {
+					excs = append(excs, run(root, c))
+					excMap[c] = struct{}{}
+					didExec = true
+				}
 			}
 		}
+
 		if !didExec {
 			return
 		}
