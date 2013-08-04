@@ -177,26 +177,22 @@ func Made(root string) (chan Execution, chan bool, error) {
 			<-stop
 			stopped = true
 		}()
-		lastRound := false
-		for !lastRound {
-			if stopped {
-				lastRound = true
-			}
+		for !stopped {
 			_, initChanges := getChanged(root)
 			<-init
 			for c := range initChanges {
 				change <- c
 			}
+			time.Sleep(time.Millisecond * 500)
 		}
 		close(change)
 	}()
+	// This waits for the watcher goroutine to be initialized
 	init <- true
 	close(init)
 
 	go func() {
 		for change := range change {
-			// LOOP:
-			// 	for i := 0; i < 3; i++ {
 			mf, err := ioutil.ReadFile(root + madeFile)
 			if err != nil {
 				return
@@ -205,10 +201,6 @@ func Made(root string) (chan Execution, chan bool, error) {
 			for _, c := range cmds {
 				excs <- run(root, c)
 			}
-			// if len(cmds) == 0 {
-			// 	break LOOP
-			// }
-			// }
 		}
 		close(excs)
 	}()
