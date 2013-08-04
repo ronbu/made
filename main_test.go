@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type endToEndTest struct {
@@ -16,28 +17,42 @@ type endToEndTest struct {
 }
 
 func testEndToEnd(t *testing.T, tcase endToEndTest) {
-	tmp, stop := TempDir()
-	defer stop()
+	tmp, rm := TempDir()
+	defer rm()
 
 	check(ioutil.WriteFile(
 		tmp+madeFile,
 		[]byte(strings.Join(tcase.madefile, "\n")),
 		0777))
 
-	initExecs, err := Made(tmp)
+	excs, stop, err := Made(tmp)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if len(initExecs) > 0 {
-		t.Fatal("Should not execute anything on init")
 	}
 
 	createAll(tmp, tcase.change)
 	changeSet := listAll(tmp)
+	time.Sleep(time.Millisecond * 10)
+	stop <- true
 
-	excs, err := Made(tmp)
-	if err != nil {
-		t.Fatal(err)
+	i := 0
+	for ex := range excs {
+		if ex.Err != nil {
+			t.Log(ex.String())
+		}
+		if len(tcase.execs) > i {
+			if tcase.execs[i] != ex.Cmd {
+				t.Error("Executed:", ex.Cmd, "instead of:", tcase.execs[i])
+			}
+		} else {
+			t.Error("Unexpected executed:", ex.Cmd)
+		}
+		i++
+	}
+	if len(tcase.execs) > i {
+		for _, c := range tcase.execs[i:] {
+			t.Error("Did not execute:", c)
+		}
 	}
 
 	for i, name := range tcase.change {
@@ -52,33 +67,11 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 		t.Fail()
 		t.Error("Made deleted:", m)
 	}
-	t.Log(built)
 	compareFilesets(t, built, tcase.expected)
-
-	// t.Log(excs)
-	var i int
-	var ex Execution
-	for i, ex = range excs {
-		if ex.Err != nil {
-			t.Log(ex.String())
-		}
-		if len(tcase.execs) > i {
-			if tcase.execs[i] != ex.Cmd {
-				t.Error("Executed:", ex.Cmd, "instead of:", tcase.execs[i])
-			}
-		} else {
-			t.Error("Unexpected executed:", ex.Cmd)
-		}
-	}
-	i++
-	if len(tcase.execs) > i {
-		for _, c := range tcase.execs[i:] {
-			t.Error("Did not execute:", c)
-		}
-	}
 }
 
 func TestSimpleCommand(t *testing.T) {
+	t.Parallel()
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp <|a|> b"},
 		change:   []string{"a", "c"},
@@ -88,6 +81,7 @@ func TestSimpleCommand(t *testing.T) {
 }
 
 func TestMultipleCommands(t *testing.T) {
+	t.Parallel()
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp <|a|> b", "cp <|c|> d"},
 		change:   []string{"a", "c"},
@@ -97,6 +91,7 @@ func TestMultipleCommands(t *testing.T) {
 }
 
 func TestDependendCommands(t *testing.T) {
+	t.Parallel()
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp <|a|> b", "cp <|b|> c"},
 		change:   []string{"a", "d"},
@@ -106,6 +101,7 @@ func TestDependendCommands(t *testing.T) {
 }
 
 func TestClassicPattern(t *testing.T) {
+	t.Parallel()
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp <|a*|> b"},
 		change:   []string{"a", "d"},
@@ -115,6 +111,7 @@ func TestClassicPattern(t *testing.T) {
 }
 
 func TestForEachPattern(t *testing.T) {
+	t.Parallel()
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp <|dir/*.a|> %fa"},
 		change:   []string{"dir/a.a"},
@@ -154,6 +151,7 @@ func TestForEachPattern(t *testing.T) {
 }
 
 func TestDirectory(t *testing.T) {
+	t.Parallel()
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp <|dir/a|> dir/b"},
 		change:   []string{"dir/a"},
@@ -163,11 +161,12 @@ func TestDirectory(t *testing.T) {
 }
 
 func TestMultipleMatches(t *testing.T) {
+	t.Parallel()
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp <|a|> <|b|> dir"},
 		change:   []string{"dir/", "a", "b"},
 		expected: []string{"dir/a", "dir/b"},
-		execs:    []string{"cp a b dir"},
+		execs:    []string{"cp a b dir", "cp a b dir"},
 	})
 }
 
@@ -175,6 +174,7 @@ func TestMultipleMatches(t *testing.T) {
 // one of them is a non existing file
 // the rule will still be executed
 func TestMultiplePatSingleMatch(t *testing.T) {
+	t.Parallel()
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp <|a|> <|b|> dir"},
 		change:   []string{"dir/", "b"},
@@ -185,6 +185,7 @@ func TestMultiplePatSingleMatch(t *testing.T) {
 
 // TODO: Detect infinite loops
 // func TestInfiniteLoop(t *testing.T) {
+// t.Parallel()
 // 	testEndToEnd(t, endToEndTest{
 // 		madefile: []string{"cp <|a|> b","cp <|b|> a"},
 // 		change:   []string{"a"},
@@ -194,6 +195,7 @@ func TestMultiplePatSingleMatch(t *testing.T) {
 // }
 
 func TestDoNothing(t *testing.T) {
+	t.Parallel()
 	testEndToEnd(t, endToEndTest{
 		madefile: []string{"cp c d"},
 		change:   []string{"a", "b"},

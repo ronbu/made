@@ -165,38 +165,54 @@ func filterCmds(change, madeFile string) (cmds []string) {
 	return
 }
 
-func Made(root string) (excs []Execution, err error) {
-	//TODO: initialize here
-	for {
-		_, changed := getChanged(root)
-		var mf []byte
-		mf, err = ioutil.ReadFile(root + madeFile)
-		if err != nil {
-			return
-		}
-		// if strings.Contains(string(mf), "\n") {
-		// 	fmt.Println(changed)
-		// }
+func Made(root string) (chan Execution, chan bool, error) {
+	excs := make(chan Execution)
+	stop := make(chan bool)
+	change := make(chan string)
 
-		didExec := false
-		excMap := make(map[string]struct{})
-		for change := range changed {
-			for _, c := range filterCmds(change, string(mf)) {
-				if _, ok := excMap[c]; ok {
-					continue
-				} else {
-					excs = append(excs, run(root, c))
-					excMap[c] = struct{}{}
-					didExec = true
-				}
+	init := make(chan bool)
+	go func() {
+		var stopped bool
+		go func() {
+			<-stop
+			stopped = true
+		}()
+		lastRound := false
+		for !lastRound {
+			if stopped {
+				lastRound = true
+			}
+			_, initChanges := getChanged(root)
+			<-init
+			for c := range initChanges {
+				change <- c
 			}
 		}
+		close(change)
+	}()
+	init <- true
+	close(init)
 
-		if !didExec {
-			return
+	go func() {
+		for change := range change {
+			// LOOP:
+			// 	for i := 0; i < 3; i++ {
+			mf, err := ioutil.ReadFile(root + madeFile)
+			if err != nil {
+				return
+			}
+			cmds := filterCmds(change, string(mf))
+			for _, c := range cmds {
+				excs <- run(root, c)
+			}
+			// if len(cmds) == 0 {
+			// 	break LOOP
+			// }
+			// }
 		}
-	}
-	return
+		close(excs)
+	}()
+	return excs, stop, nil
 }
 
 func listAll(dir string) (files []string) {
