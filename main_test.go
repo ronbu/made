@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type endToEndTest struct {
@@ -36,18 +37,23 @@ func testEndToEnd(t *testing.T, tcase endToEndTest) {
 	changeSet := listAll(tmp)
 
 	i := 0
+LOOP:
 	for ; i < len(tcase.execs); i++ {
-		ex := <-excs
-		if ex.Err != nil {
-			t.Log(ex.String())
-		}
-		if len(tcase.execs) > i {
+		select {
+		case <-time.After(time.Second * 10):
+			t.Error("timeout")
+			break LOOP
+		case ex := <-excs:
+			if ex.Err != nil {
+				t.Log(ex.String())
+			}
 			if tcase.execs[i] != ex.Cmd {
 				t.Error("Executed:", ex.Cmd, "instead of:", tcase.execs[i])
 			}
-		} else {
-			t.Error("Unexpected executed:", ex.Cmd)
 		}
+	}
+	if len(excs) > 0 {
+		t.Error("Unexpected executed:", len(excs))
 	}
 	if len(tcase.execs) > i {
 		for _, c := range tcase.execs[i:] {
