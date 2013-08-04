@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -23,6 +24,32 @@ type files map[string]time.Time
 type changes map[string]bool
 
 func main() {
+	if len(os.Args) > 2 {
+		fmt.Fprintln(os.Stderr, "Usage:", os.Args[0], "[root]")
+	}
+
+	root, err := os.Getwd()
+	check(err)
+	if len(os.Args) == 2 {
+		root = os.Args[1]
+	}
+
+	excs, stop, _ := Made(root)
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		<-c
+		stop <- true
+	}()
+
+	for exc := range excs {
+		if exc.Err != nil {
+			fmt.Fprint(os.Stderr, exc.String())
+		} else {
+			fmt.Print(exc.String())
+		}
+	}
 
 }
 
