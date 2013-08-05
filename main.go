@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ronbu/fsevents"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -26,6 +27,7 @@ type changes map[string]bool
 func main() {
 	if len(os.Args) > 2 {
 		fmt.Fprintln(os.Stderr, "Usage:", os.Args[0], "[root]")
+		os.Exit(1)
 	}
 
 	root, err := os.Getwd()
@@ -197,26 +199,30 @@ func Made(root string) (chan Execution, chan bool, error) {
 	stop := make(chan bool)
 	change := make(chan string)
 
-	init := make(chan bool)
+	ch := fsevents.WatchPaths([]string{root})
+	_, initChanges := getChanged(root)
+
 	go func() {
-		var stopped bool
 		go func() {
 			<-stop
-			stopped = true
+			fsevents.Unwatch(ch)
 		}()
-		for !stopped {
-			_, initChanges := getChanged(root)
-			<-init
-			for c := range initChanges {
-				change <- c
+		for c, _ := range initChanges {
+			change <- c
+		}
+		// println("--- new init")
+		for pes := range ch {
+			for _, pe := range pes {
+				if pe.Flags != fsevents.FlagItemRemoved {
+					relPath, err := filepath.Rel(root, pe.Path)
+					check(err)
+					// fmt.Println(pe)
+					change <- relPath
+				}
 			}
-			time.Sleep(time.Millisecond * 500)
 		}
 		close(change)
 	}()
-	// This waits for the watcher goroutine to be initialized
-	init <- true
-	close(init)
 
 	go func() {
 		for change := range change {
