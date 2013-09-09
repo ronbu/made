@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -36,14 +35,14 @@ func main() {
 		root = os.Args[1]
 	}
 
-	excs, stop, _ := Made(root)
+	excs, _, _ := Made(root)
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-	go func() {
-		<-c
-		stop <- true
-	}()
+	// c := make(chan os.Signal, 1)
+	// signal.Notify(c, os.Interrupt)
+	// go func() {
+	// 	<-c
+	// 	stop <- true
+	// }()
 
 	for exc := range excs {
 		if exc.Err != nil {
